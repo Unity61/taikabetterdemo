@@ -97,14 +97,14 @@ O webhook só chega a um endereço HTTPS público. Passos:
 ## Segurança, em resumo
 
 - Visitante só lê cardápio e status, faz pedido e vê o próprio pedido por um token de 192 bits. Todo o resto exige sessão conferida no servidor.
-- Senhas com PBKDF2-SHA256, 600.000 iterações. Bloqueio após 5 falhas em 15 min, Turnstile no login, mesma mensagem para usuário ou senha errados.
+- Senhas com PBKDF2-SHA256, 100.000 iterações (o máximo que os Workers publicados aceitam). Bloqueio após 5 falhas em 15 min, Turnstile no login, mesma mensagem para usuário ou senha errados.
 - Sessão: token aleatório guardado só como hash; cookie `__Host-`, `HttpOnly`, `Secure`, `SameSite=Strict`; expira com 30 min sem uso ou 12 h; logout apaga a sessão. CSRF por token + conferência de origem.
 - O servidor recalcula todo pedido com os preços do banco. SQL sempre com parâmetros. O painel monta a tela só com `textContent`. CSP estrita no painel (nada inline).
 - Uploads conferidos pelo conteúdo (JPG, PNG, WebP, até 2 MB). Auditoria de toda ação do painel. Nada de senha, token ou dado de cliente em log.
 
 ## Antes de publicar de verdade
 
-1. **Hash de senha na Cloudflare:** confirmar que o runtime publicado aceita 600.000 iterações de PBKDF2 (historicamente o limite era 100.000) e que cabe no tempo de CPU do plano. Só foi testado localmente.
+1. **Hash de senha:** os Workers publicados limitam o PBKDF2 a 100.000 iterações (600.000 dava erro 500 no login). Para mais força, trocar por um hash que não dependa desse limite.
 2. **LGPD:** aviso de privacidade no site, base legal, prazo de retenção de pedidos e de dados de clientes, canal para pedidos de exclusão.
 3. **2FA** para contas de dono.
 4. **Backups** do D1 e do R2, com teste de restauração.

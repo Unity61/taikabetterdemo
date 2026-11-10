@@ -88,7 +88,8 @@ export async function igual(a: string, b: string): Promise<boolean> {
   return d === 0;
 }
 
-export const ITERACOES = 600000;
+// 100.000 é o máximo de iterações de PBKDF2 aceito pelo runtime publicado dos Cloudflare Workers.
+export const ITERACOES = 100000;
 async function pbkdf2(senha: string, sal: Uint8Array, iter: number): Promise<Uint8Array> {
   const k = await crypto.subtle.importKey('raw', enc.encode(senha), 'PBKDF2', false, ['deriveBits']);
   return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: sal, iterations: iter }, k, 256));
@@ -101,7 +102,7 @@ export async function conferirSenha(senha: string, guardado: string): Promise<bo
   const p = guardado.split('$');
   if (p.length !== 4 || p[0] !== 'pbkdf2-sha256') return false;
   const iter = +p[1];
-  if (!Number.isInteger(iter) || iter < 100000 || iter > 5000000) return false;
+  if (!Number.isInteger(iter) || iter < 100000 || iter > ITERACOES) return false;
   const h = await pbkdf2(senha, deB64(p[2]), iter);
   return igual(b64(h), p[3]);
 }

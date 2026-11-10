@@ -17,7 +17,7 @@ const credFile = path.resolve(arg('--cred') || path.join(raiz, '..', 'credenciai
 const semFotos = process.argv.includes('--sem-fotos');
 const remoto = process.argv.includes('--remote');
 const alvo = remoto ? '--remote' : '--local';
-const ITER = 600000;
+const ITER = 100000; // máximo aceito pelos Cloudflare Workers publicados
 
 const ctx = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(raiz, '..', 'taika', 'dados.js'), 'utf8'), ctx);
