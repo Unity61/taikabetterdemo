@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "taika-sistema",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["sistema/node_modules/wrangler/bin/wrangler.js", "dev", "--cwd", "sistema"],
+      "port": 8787
+    },
+    {
+      "name": "taika-sistema-8790",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["sistema/node_modules/wrangler/bin/wrangler.js", "dev", "--cwd", "sistema", "--port", "8790"],
+      "port": 8790,
+      "autoPort": false
+    }
+  ]
+}

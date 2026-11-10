@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.dev.vars
+credenciais-demo.txt
+sistema/seed.local.sql
+*.log
+.wrangler-dev.log

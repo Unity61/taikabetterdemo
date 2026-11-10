@@ -1,0 +1,18 @@
+{
+  "name": "taika-sistema",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "migrar": "wrangler d1 migrations apply taika --local",
+    "seed": "node scripts/seed.mjs",
+    "preparar": "npm run migrar && npm run seed",
+    "tipos": "tsc --noEmit",
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261110.1",
+    "typescript": "7.0.2",
+    "wrangler": "4.160.0"
+  }
+}
