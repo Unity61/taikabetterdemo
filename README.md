@@ -84,6 +84,7 @@ O webhook só chega a um endereço HTTPS público. Passos:
    npx wrangler d1 create taika        # copie o database_id para wrangler.jsonc
    npx wrangler r2 bucket create taika-fotos
    npx wrangler d1 migrations apply taika --remote
+   npm run seed:remoto                 # cardápio, fotos e contas de demonstração no D1/R2 publicados
    npx wrangler secret put TURNSTILE_SECRET
    npx wrangler secret put MP_ACCESS_TOKEN
    npx wrangler deploy

@@ -1,5 +1,6 @@
 // Importa taika/dados.js para o D1 local, envia as fotos para o R2 local e cria as contas de demonstração.
-// Uso: node scripts/seed.mjs [--persist-to <dir>] [--cred <arquivo>] [--sem-fotos]
+// Uso: node scripts/seed.mjs [--persist-to <dir>] [--cred <arquivo>] [--sem-fotos] [--remote]
+// --remote grava no D1 e no R2 publicados na Cloudflare (apaga pedidos e alterações de lá).
 // As senhas são geradas aqui e gravadas apenas no arquivo de credenciais (ignorado pelo git). Nada é impresso.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,6 +15,8 @@ const arg = (n) => { const i = process.argv.indexOf(n); return i > 0 ? process.a
 const persist = arg('--persist-to');
 const credFile = path.resolve(arg('--cred') || path.join(raiz, '..', 'credenciais-demo.txt'));
 const semFotos = process.argv.includes('--sem-fotos');
+const remoto = process.argv.includes('--remote');
+const alvo = remoto ? '--remote' : '--local';
 const ITER = 600000;
 
 const ctx = { window: {} };
@@ -90,12 +93,12 @@ sql.push(`INSERT INTO cupons (codigo,tipo,valor,minimo) VALUES ('TAIKA10','pct',
 const arquivo = path.join(raiz, 'seed.local.sql');
 fs.writeFileSync(arquivo, sql.join('\n') + '\n');
 const wr = path.join(raiz, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
-const extra = persist ? ['--persist-to', persist] : [];
+const extra = persist && !remoto ? ['--persist-to', persist] : [];
 const run = (args) => execFileSync(process.execPath, [wr, ...args, ...extra], { cwd: raiz, stdio: ['ignore', 'pipe', 'pipe'] });
 try {
-  run(['d1', 'migrations', 'apply', 'taika', '--local']);
-  run(['d1', 'execute', 'taika', '--local', '--file', arquivo, '--yes']);
-  if (!semFotos) for (const [chave, origem] of fotos) run(['r2', 'object', 'put', 'taika-fotos/' + chave, '--file', origem, '--content-type', 'image/jpeg', '--local']);
+  run(['d1', 'migrations', 'apply', 'taika', alvo]);
+  run(['d1', 'execute', 'taika', alvo, '--file', arquivo, '--yes']);
+  if (!semFotos) for (const [chave, origem] of fotos) run(['r2', 'object', 'put', 'taika-fotos/' + chave, '--file', origem, '--content-type', 'image/jpeg', alvo]);
 } catch (e) {
   console.error('Falha no seed:', String(e.stderr || e.message).slice(-1500)); process.exit(1);
 } finally { fs.rmSync(arquivo, { force: true }); }

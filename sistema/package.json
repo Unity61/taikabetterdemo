@@ -8,7 +8,9 @@
     "seed": "node scripts/seed.mjs",
     "preparar": "npm run migrar && npm run seed",
     "tipos": "tsc --noEmit",
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "seed:remoto": "node scripts/seed.mjs --remote",
+    "publicar": "wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261110.1",
