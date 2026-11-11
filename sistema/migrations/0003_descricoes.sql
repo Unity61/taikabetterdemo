@@ -1,0 +1,34 @@
+-- Descrições para os itens do cardápio que não tinham nenhuma.
+-- Só preenche descrições vazias: o que já foi editado no painel fica como está.
+UPDATE itens SET descricao = 'Shimeji salteado na manteiga, finalizado com cebolinha.' WHERE id = 10683183 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Cubos de salmão marinados no limão, com cebola roxa e pimenta dedo de moça.' WHERE id = 10683188 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Camarões grandes empanados e fritos.' WHERE id = 10684712 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Camarões empanados e fritos, crocantes como pipoca.' WHERE id = 10684713 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Espetinho de salmão grelhado na brasa, finalizado com molho tarê.' WHERE id = 10684742 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Fatias de salmão fresco.' WHERE id = 10684744 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Fatias de anchova defumada.' WHERE id = 10684746 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Fatias de kani.' WHERE id = 10684751 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Camarão cozido em fatias.' WHERE id = 10684752 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Fatias de polvo importado.' WHERE id = 10684768 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Sashimi de salmão finalizado com pesto de manjericão.' WHERE id = 10684769 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Niguiri de salmão fresco.' WHERE id = 10684772 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Niguiri de camarão.' WHERE id = 10684774 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Niguiri de anchova defumada.' WHERE id = 10684776 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Niguiri de kani.' WHERE id = 10684778 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Niguiri de skin (pele de salmão grelhada).' WHERE id = 10684779 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Niguiri de polvo importado.' WHERE id = 10684780 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Mini churros com açúcar e canela, servidos com doce de leite.' WHERE id = 10685319 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Brownie de chocolate servido com sorvete.' WHERE id = 10685320 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Garrafa, sem gás.' WHERE id = 10685330 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Garrafa, com gás.' WHERE id = 10685338 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Suco natural de acerola.' WHERE id = 10685357 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Suco natural de caju.' WHERE id = 10685358 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Suco natural de cupuaçu.' WHERE id = 10685359 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Suco natural de goiaba.' WHERE id = 10685360 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Suco natural de maracujá.' WHERE id = 10685361 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Suco natural de taperebá.' WHERE id = 10685362 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Pepino fatiado.' WHERE id = 10685373 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Gengibre em conserva.' WHERE id = 10685374 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Arroz japonês temperado.' WHERE id = 10685376 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Shimeji, camarão e salmão salteados na manteiga, finalizados com cebolinha.' WHERE id = 10785490 AND (descricao IS NULL OR trim(descricao) = '');
+UPDATE itens SET descricao = 'Hambúrguer de salmão grelhado no pão macio, finalizado com molho tarê.' WHERE id = 11153318 AND (descricao IS NULL OR trim(descricao) = '');

@@ -23,7 +23,9 @@ const sent=s=>{s=s.toLowerCase();return s.charAt(0).toUpperCase()+s.slice(1)};
 const IMG=(id,w,h)=>'https://images.unsplash.com/photo-'+id+'?auto=format&fit=crop&w='+w+'&h='+h+'&q=72';
 const FOTO=f=>f;
 const store={get(k,d){try{const v=localStorage.getItem('taika3.'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('taika3.'+k,JSON.stringify(v))}catch(e){}}};
-const HERO='1588182657969-777d766e31ab', GRILL='1526213174737-acd9757c6bf3';
+const HERO='1588182657969-777d766e31ab';
+/* telas grandes: fotos em paisagem e com mais resolução; no celular nada muda */
+const DESK=!!(window.matchMedia&&matchMedia('(min-width:900px)').matches);
 
 /* ── category dressing: kanji label and, where the store has no photo of its own, an illustrative cover ── */
 const META={
@@ -138,11 +140,9 @@ const rowHTML=(it,q,showCat)=>'<article class="row'+(it.pausado?' off':'')+'" da
   '<h3>'+hl(it.nome,q)+'</h3>'+(it.unidade&&(showCat||it.unidade!==it.cat.unidade)?'<span class="unit">'+esc(it.unidade)+'</span>':'')+(it.desc?'<p class="desc">'+hl(it.desc,q)+'</p>':'')+
   '</div><div class="row__side">'+priceHTML(it.preco)+addHTML(it)+'</div></article>';
 const tearSVG=(cls,seed)=>'<svg class="tear '+cls+'" viewBox="0 0 400 22" preserveAspectRatio="none" data-tear="'+seed+'" aria-hidden="true"></svg>';
-const INTER='<div class="inter" id="inter">'+tearSVG('tear--a',19)+'<img src="'+IMG(GRILL,900,1100)+'" alt="" loading="lazy" decoding="async"><p class="inter__k" aria-hidden="true">火</p>'+
-  '<p class="inter__t"><span data-rv>Brasa, maçarico</span><span data-rv>e peixe fresco.</span><span data-rv>O resto é detalhe.</span></p>'+tearSVG('tear--b',53)+'</div>';
 
 /* ── render: hero, ticker, destaques, cardápio ── */
-$('#hero-img').src=IMG(HERO,900,1500);
+$('#hero-img').src=DESK?IMG(HERO,2400,1500):IMG(HERO,900,1500);
 const tick=[['刺身','Sashimi'],['握り','Niguiri'],['裏巻','Uramaki'],['手巻','Temaki'],['炙り','Maçaricado'],['炉端','Robata'],['揚巻','Hot']].map(t=>'<span><em>'+t[0]+'</em>'+t[1]+'<i></i></span>').join('');
 $('#ticker').innerHTML=tick+tick;
 const SIGNO=['壱','弐','参','肆','伍','陸'];
@@ -164,11 +164,12 @@ function renderMenu(){
       cards='<div class="grid">'+ord.map(it=>{const w=it.id===wideId;return cardHTML(it,w,w?'':(k++%2?'r':'l'))}).join('')+'</div>';
     }
     const sub=[c.unidade?c.unidade+' por porção':'',c.nota,c.itens.length+(c.itens.length===1?' opção':' opções')].filter(Boolean).join(' · ');
-    body+='<section class="sec" id="'+c.id+'" aria-labelledby="h-'+c.id+'"><header class="sec__head"><div class="sec__k" aria-hidden="true">'+c.jp+'</div>'+
+    /* poucas fotos (ou só a capa) ao lado de uma lista: no computador a foto fica fixa ao lado da lista */
+    const split=sem.length&&(fot.length?fot.length<=2:!!c.capa);
+    body+='<section class="sec'+(split?' sec--split':'')+'" id="'+c.id+'" aria-labelledby="h-'+c.id+'"><header class="sec__head"><div class="sec__k" aria-hidden="true">'+c.jp+'</div>'+
       '<div><span class="sec__n">Nº '+(ci+1)+' de '+CATS.length+'</span><h2 id="h-'+c.id+'">'+esc(c.titulo)+'</h2><p>'+esc(sub)+'</p></div></header>'+
       (c.capa&&!fot.length?'<figure class="cover" data-rv><img src="'+IMG(c.capa,900,506)+'" alt="" loading="lazy" decoding="async"><span>Imagem ilustrativa</span></figure>':'')+
       cards+(sem.length?'<div class="rows">'+sem.map(it=>rowHTML(it,'',false)).join('')+'</div>':'')+'</section>';
-    if(ci===5) body+=INTER;
     tabs+='<a class="tab" href="#'+c.id+'" data-tab="'+c.id+'">'+esc(c.titulo)+'<i>'+c.jp+'</i></a>';
   });
   $('#menu-body').innerHTML=body;
@@ -181,7 +182,8 @@ function renderMenu(){
   $$('.hero__meta').forEach(el=>{el.innerHTML=[L.entrega.ativa&&'Entrega',L.retirada.ativa&&'Retirada',esc(L.endereco.cidade)].filter(Boolean).join('<i></i>')});
   $$('[data-tear]').forEach(svg=>{
     let s=+svg.dataset.tear*7919+13; const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647};
-    const line=(base,amp)=>{let y=base,d='M0 22 L0 '+y.toFixed(1);for(let x=0;x<=400;x+=2.5+rnd()*6.5){y+=(rnd()-.5)*amp;y=Math.max(2,Math.min(18,y));d+=' L'+x.toFixed(1)+' '+y.toFixed(1)}return d+' L400 '+y.toFixed(1)+' L400 22 Z'};
+    const W=DESK?1200:400; if(DESK) svg.setAttribute('viewBox','0 0 '+W+' 22');
+    const line=(base,amp)=>{let y=base,d='M0 22 L0 '+y.toFixed(1);for(let x=0;x<=W;x+=2.5+rnd()*6.5){y+=(rnd()-.5)*amp;y=Math.max(2,Math.min(18,y));d+=' L'+x.toFixed(1)+' '+y.toFixed(1)}return d+' L'+W+' '+y.toFixed(1)+' L'+W+' 22 Z'};
     const a=line(9,7), b=line(14,5); svg.innerHTML='<path d="'+b+'"/><path d="'+a+'"/>';
   });
 }
@@ -191,14 +193,14 @@ document.addEventListener('error',e=>{const t=e.target;if(!t||t.tagName!=='IMG')
   t.style.visibility='hidden';if(t.parentElement)t.parentElement.classList.add('noimg')},true);
 
 /* ── o cardápio muda no painel: buscar de novo e redesenhar ── */
-let spyObs=null, inter=null, interImg=null, curTab=null;
+let spyObs=null, curTab=null;
 async function atualizar(){
   let A; try{A=await api('cardapio')}catch(e){return}
   if(A.versao===VERSAO) return;
   const y=window.scrollY;
   carregar(A);
   const antes=cart.length; cart=cart.filter(linhaOk); if(cart.length!==antes){save();toast('Um item do seu pedido ficou indisponível e foi removido')}
-  renderMenu(); inter=null; interImg=null;
+  renderMenu();
   $$('#menu-body [data-rv], #sig-track [data-rv], #foot-info [data-rv]').forEach(el=>el.classList.add('in'));
   if(spyObs) $$('.sec').forEach(s=>spyObs.observe(s));
   window.scrollTo(0,y);
@@ -600,8 +602,6 @@ function onScroll(){
   const y=window.scrollY, hh=hero.offsetHeight, vh=window.innerHeight, past=y>hh*.6;
   topbar.classList.toggle('show',past); document.body.classList.toggle('navon',past);
   if(!RM&&y<hh){const ty=(y*.24).toFixed(1)+'px';hlogo.style.translate='0 '+ty;lock.style.translate='0 '+ty}
-  if(!inter){inter=$('#inter');interImg=inter&&$('img',inter)}
-  if(!RM&&interImg){const r=inter.getBoundingClientRect();if(r.bottom>0&&r.top<vh)interImg.style.transform='translate3d(0,'+((r.top/vh)*-44).toFixed(1)+'px,0)'}
 }
 window.addEventListener('scroll',()=>{if(!ticking){ticking=true;requestAnimationFrame(onScroll)}},{passive:true});
 onScroll();
@@ -611,6 +611,14 @@ function sigPar(){sticking=false;if(RM)return;const tr=track.getBoundingClientRe
   $$('.sigc',track).forEach(c=>{const r=c.getBoundingClientRect(),off=(r.left+r.width/2-mid)/tr.width;$('img',c).style.transform='translate3d('+(off*-34).toFixed(1)+'px,0,0)'})}
 track.addEventListener('scroll',()=>{if(!sticking){sticking=true;requestAnimationFrame(sigPar)}},{passive:true});
 sigPar();
+
+/* computador: setas nos destaques e roda do mouse nas abas (no celular as setas ficam escondidas) */
+const sigB=$$('[data-sig]');
+function sigArrows(){const max=track.scrollWidth-track.clientWidth-2;sigB.forEach(b=>{b.disabled=+b.dataset.sig<0?track.scrollLeft<=2:track.scrollLeft>=max})}
+sigB.forEach(b=>b.addEventListener('click',()=>{const c=$('.sigc',track);if(!c)return;const step=(c.offsetWidth+parseFloat(getComputedStyle(track).columnGap||0))*Math.max(1,Math.floor(track.clientWidth/c.offsetWidth)-1);
+  track.scrollBy({left:+b.dataset.sig*step,behavior:RM?'auto':'smooth'})}));
+track.addEventListener('scroll',sigArrows,{passive:true}); window.addEventListener('resize',sigArrows); sigArrows();
+tabsEl.addEventListener('wheel',e=>{if(Math.abs(e.deltaY)<=Math.abs(e.deltaX)||tabsEl.scrollWidth<=tabsEl.clientWidth)return;tabsEl.scrollLeft+=e.deltaY;e.preventDefault()},{passive:false});
 
 /* ── o fogo: um risco de fósforo, depois brasas ── */
 const fire=(function(){

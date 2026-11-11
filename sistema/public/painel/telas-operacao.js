@@ -45,15 +45,53 @@ function corpoPedido(p) {
     h('div', { class: 'bloco' }, h('h4', { text: 'Andamento' }), h('ul', { class: 'linha-tempo' }, p.eventos.map((e) => h('li', null, h('span', { text: STATUS[e.status] + (e.usuario ? ' · ' + e.usuario : '') }), h('span', { class: 'mut num', text: dataHora(e.em) })))))
   ];
 }
+/* comanda impressa: layout de cupom de impressora térmica (80 mm) */
 function imprimirPedido(p) {
-  const l = (a, b, c) => h('div', { class: 'l' + (c ? ' ' + c : '') }, h('span', { text: a }), h('span', { text: b }));
-  $('#imprimir').replaceChildren(
-    h('h1', { text: CFG.loja.nome }), h('p', { class: 'g', text: 'PEDIDO Nº ' + p.id + ' · ' + (p.tipo === 'entrega' ? 'ENTREGA' : 'RETIRADA') }), h('p', { text: dataHora(p.criado) }), h('hr'),
-    h('p', { text: p.cliente_nome + ' · ' + fone(p.cliente_tel) }), p.tipo === 'entrega' && h('p', { text: p.endereco + ' · ' + p.bairro }), h('hr'),
-    p.itens.map((i) => [l(i.qtd + 'x ' + i.nome, brl(i.total)), i.opcoes.map((o) => h('p', { class: 's', text: '+ ' + o.nome })), i.obs && h('p', { class: 's', text: 'OBS: ' + i.obs })]),
-    p.obs && h('p', { text: 'OBS DO PEDIDO: ' + p.obs }), h('hr'),
-    l('Subtotal', brl(p.subtotal)), p.desconto > 0 && l('Desconto', '- ' + brl(p.desconto)), l('Entrega', p.taxa ? brl(p.taxa) : 'Grátis'), l('TOTAL', brl(p.total), 'g'),
-    h('p', { text: 'Pagamento: ' + PAG[p.pagamento] + ' (' + PAGST[p.pag_status] + ')' + (p.troco ? ' · troco para ' + brl(p.troco) : '') }));
+  const L = CFG.loja, E = L.endereco || {}, entrega = p.tipo === 'entrega';
+  const v = (c) => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const lin = (a, b, cls) => h('div', { class: 'r-l' + (cls ? ' ' + cls : '') }, h('span', { text: a }), h('i'), h('span', { text: b }));
+  const sep = (dupla) => h('div', { class: dupla ? 'r-sep r-sep--d' : 'r-sep' });
+  const pago = p.pag_status === 'pago' || p.pag_status === 'simulado';
+  const troco = p.pagamento === 'dinheiro' && p.troco > p.total ? p.troco - p.total : 0;
+  $('#imprimir').replaceChildren(h('div', { class: 'recibo' },
+    h('div', { class: 'r-cab' },
+      h('p', { class: 'r-loja', text: (L.nome || 'Taika Sushi').toUpperCase() }),
+      E.rua && h('p', { text: E.rua + (E.bairro ? ', ' + E.bairro : '') }),
+      E.cidade && h('p', { text: E.cidade + (E.uf ? ' - ' + E.uf : '') }),
+      L.telefone && h('p', { text: 'Tel.: ' + fone(String(L.telefone).replace(/\D/g, '')) })),
+    sep(true),
+    h('p', { class: 'r-tit', text: 'PEDIDO Nº ' + String(p.id).padStart(4, '0') }),
+    h('p', { class: 'r-tipo' }, h('span', { text: entrega ? 'ENTREGA' : 'RETIRADA NO BALCÃO' })),
+    h('p', { class: 'r-c', text: dataHora(p.criado) }),
+    sep(),
+    h('p', { class: 'r-rot', text: 'CLIENTE' }),
+    h('p', { class: 'r-b', text: p.cliente_nome }),
+    h('p', { text: fone(p.cliente_tel) }),
+    entrega && [h('p', { class: 'r-rot r-esp', text: 'ENDEREÇO' }), h('p', { class: 'r-b', text: p.endereco }), h('p', { text: p.bairro })],
+    sep(),
+    h('div', { class: 'r-cols' }, h('span', { text: 'QTD  ITEM' }), h('span', { text: 'VALOR' })),
+    sep(),
+    p.itens.map((i) => h('div', { class: 'r-item' },
+      h('div', { class: 'r-il' }, h('span', { class: 'r-q', text: i.qtd + 'x' }), h('span', { class: 'r-n', text: i.nome }), h('span', { class: 'r-v', text: v(i.total) })),
+      i.qtd > 1 && h('p', { class: 'r-sub', text: i.qtd + ' x ' + v(i.total / i.qtd) }),
+      i.opcoes.map((o) => h('p', { class: 'r-sub', text: '+ ' + o.nome + (o.preco ? '  (' + v(o.preco) + ')' : '') })),
+      i.obs && h('p', { class: 'r-sub r-obs', text: 'OBS: ' + i.obs }))),
+    sep(),
+    lin('Subtotal', v(p.subtotal)),
+    p.desconto > 0 && lin('Desconto' + (p.cupom ? ' (' + p.cupom + ')' : ''), '-' + v(p.desconto)),
+    lin(entrega ? 'Taxa de entrega' : 'Retirada', p.taxa ? v(p.taxa) : 'GRÁTIS'),
+    sep(),
+    lin('TOTAL R$', v(p.total), 'r-tot'),
+    sep(),
+    lin('Pagamento', PAG[p.pagamento]),
+    lin('Situação', pago ? (p.pag_status === 'pago' ? 'PAGO' : 'PAGO (TESTE)') : entrega ? 'COBRAR NA ENTREGA' : 'COBRAR NO BALCÃO'),
+    p.troco > 0 && lin('Troco para', v(p.troco)),
+    troco > 0 && lin('Levar de troco', v(troco), 'r-b'),
+    p.obs && [sep(), h('p', { class: 'r-rot', text: 'OBSERVAÇÃO DO PEDIDO' }), h('p', { class: 'r-caixa', text: p.obs })],
+    sep(true),
+    h('p', { class: 'r-c r-b', text: 'Obrigado pela preferência!' }),
+    h('p', { class: 'r-c', text: 'NÃO É DOCUMENTO FISCAL' }),
+    h('p', { class: 'r-c r-mini', text: 'Impresso em ' + dataHora(Math.floor(Date.now() / 1000)) })));
   window.print();
 }
 let gaveta = null;

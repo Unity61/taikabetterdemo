@@ -212,13 +212,37 @@ tr.pausado td:not(.acoes):not(.chv){opacity:.5}
   .g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g3,.g2,.duas{grid-template-columns:1fr}
   .grupo ul{columns:1}
 }
+/* comanda impressa: só o cupom vai para o papel (a gaveta do pedido fica fora de #app e também é escondida) */
+@page{margin:4mm}
 @media print{
-  body{background:#fff}
-  #app,#toasts,dialog{display:none!important}
-  #imprimir{display:block;font:13px/1.4 "Courier New",monospace;color:#000;width:72mm;padding:2mm}
-  #imprimir h1{font:700 17px/1.2 "Courier New",monospace;text-align:center}
-  #imprimir hr{border:0;border-top:1px dashed #000;margin:6px 0}
-  #imprimir .l{display:flex;justify-content:space-between;gap:8px}
-  #imprimir .s{padding-left:10px}
-  #imprimir .g{font-weight:700;font-size:15px}
+  html,body{background:#fff!important;margin:0;padding:0;height:auto;overflow:visible}
+  body>:not(#imprimir){display:none!important}
+  #imprimir{display:block!important}
 }
+.recibo{width:72mm;padding:1mm 0 6mm;font:400 12px/1.38 "Courier New",Courier,monospace;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.recibo p{margin:0}
+.recibo .r-cab{text-align:center;margin-bottom:5px}
+.recibo .r-cab p{font-size:11px}
+.recibo .r-loja{font-size:20px!important;font-weight:700;letter-spacing:.12em;line-height:1.15;margin-bottom:3px!important}
+.recibo .r-sep{height:0;margin:6px 0;border-top:1px dashed #000}
+.recibo .r-sep--d{height:3px;border-top:1px solid #000;border-bottom:1px solid #000}
+.recibo .r-tit{text-align:center;font-size:18px;font-weight:700;letter-spacing:.06em;margin-top:2px}
+.recibo .r-tipo{text-align:center;margin:4px 0 3px}
+.recibo .r-tipo span{display:inline-block;padding:2px 8px;background:#000;color:#fff;font-weight:700;letter-spacing:.1em}
+.recibo .r-c{text-align:center}
+.recibo .r-b{font-weight:700}
+.recibo .r-rot{font-size:10.5px;font-weight:700;letter-spacing:.12em}
+.recibo .r-esp{margin-top:4px}
+.recibo .r-cols{display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;letter-spacing:.08em}
+.recibo .r-item{margin:0 0 5px;break-inside:avoid}
+.recibo .r-il{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:start;font-weight:700}
+.recibo .r-q{min-width:24px}
+.recibo .r-v{white-space:nowrap}
+.recibo .r-sub{padding-left:30px;font-size:11px}
+.recibo .r-obs{font-weight:700}
+.recibo .r-l{display:flex;align-items:baseline;gap:4px}
+.recibo .r-l i{flex:1;border-bottom:1px dotted #000;transform:translateY(-3px)}
+.recibo .r-l span:last-child{white-space:nowrap}
+.recibo .r-tot{font-size:17px;font-weight:700}
+.recibo .r-caixa{margin-top:3px;padding:4px 6px;border:1px solid #000;font-weight:700}
+.recibo .r-mini{font-size:10px;margin-top:4px}
