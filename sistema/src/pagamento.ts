@@ -1,4 +1,4 @@
-import { Env, Erro, agora, json, hmacHex, igual } from './util';
+import { Env, Erro, agora, json, hmacHex, igual, deB64 } from './util';
 import { pedidoPorToken } from './publico';
 
 const API = 'https://api.mercadopago.com';
@@ -40,31 +40,49 @@ async function mp<T>(env: Env, caminho: string, init?: RequestInit): Promise<T> 
   return r.json<T>();
 }
 
-export async function criarPreferencia(env: Env, req: Request, p: { id: number; ref: string; total: number }): Promise<string> {
-  const origem = new URL(req.url).origin;
-  const corpo: Record<string, unknown> = {
-    items: [{ title: `Pedido nº ${p.id} · Taika Sushi`, quantity: 1, currency_id: 'BRL', unit_price: p.total / 100 }],
-    external_reference: p.ref,
-    back_urls: { success: origem + '/?pagamento=retorno', pending: origem + '/?pagamento=retorno', failure: origem + '/?pagamento=retorno' },
-    payment_methods: { installments: 1 },
-    statement_descriptor: 'TAIKA SUSHI'
+/* ── Pix (API de Orders do Mercado Pago) ── */
+// O Pix vale 30 min: é o mesmo prazo em que o painel cancela pedidos online sem pagamento.
+const PIX_VALIDADE = 'PT30M';
+export interface Pix { codigo: string; expira: number; qr: boolean; }
+interface Ordem {
+  id: string; status: string; status_detail?: string; external_reference?: string; total_amount?: string; total_paid_amount?: string; currency?: string;
+  transactions?: { payments?: { id?: string; status?: string; date_of_expiration?: string; payment_method?: { id?: string; qr_code?: string; qr_code_base64?: string } }[] };
+}
+const reais = (c: number) => (c / 100).toFixed(2);
+const centavos = (v: unknown) => (typeof v === 'string' && /^\d+(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN);
+
+/** Cria (uma vez) a cobrança Pix do pedido e guarda o código copia e cola e o QR. Chamar de novo devolve a mesma cobrança. */
+export async function cobrancaPix(env: Env, p: { id: number; ref: string; total: number }): Promise<Pix> {
+  const atual = await env.DB.prepare('SELECT pix_ordem, pix_codigo, pix_qr, pix_expira FROM pedidos WHERE id = ?').bind(p.id)
+    .first<{ pix_ordem: string | null; pix_codigo: string | null; pix_qr: string | null; pix_expira: number | null }>();
+  if (atual?.pix_ordem && atual.pix_codigo) return { codigo: atual.pix_codigo, expira: atual.pix_expira || 0, qr: !!atual.pix_qr };
+  if ((await modoOnline(env)) !== 'mercadopago') throw new Erro(409, 'Pagamento online não configurado.');
+  const corpo = {
+    type: 'online', processing_mode: 'automatic', external_reference: p.ref, total_amount: reais(p.total),
+    description: `Pedido nº ${p.id} · Taika Sushi`,
+    transactions: { payments: [{ amount: reais(p.total), payment_method: { id: 'pix', type: 'bank_transfer' }, expiration_time: PIX_VALIDADE }] },
+    // Só credenciais de teste chegam aqui (modoOnline). No sandbox, o pagador "APRO" faz o Mercado Pago aprovar o Pix sozinho
+    // quando o valor é R$ 50,00: é assim que se simula o cliente pagando. Outros valores ficam aguardando até expirar.
+    payer: { email: 'test_payer@example.com', first_name: 'APRO' }
   };
-  // O Mercado Pago só aceita URL pública para notificações; em localhost a confirmação é feita pela consulta em conferirPagamento.
-  if (origem.startsWith('https://')) corpo.notification_url = origem + '/api/pagamentos/webhook';
-  const r = await mp<{ sandbox_init_point?: string }>(env, '/checkout/preferences', { method: 'POST', body: JSON.stringify(corpo), headers: { 'x-idempotency-key': p.ref } });
-  if (!r.sandbox_init_point || !/^https:\/\//.test(r.sandbox_init_point)) throw new Erro(502, 'Preferência sem endereço de sandbox.');
-  return r.sandbox_init_point;
+  const o = await mp<Ordem>(env, '/v1/orders', { method: 'POST', body: JSON.stringify(corpo), headers: { 'x-idempotency-key': 'pix-' + p.ref } });
+  const pg = o.transactions?.payments?.[0], codigo = pg?.payment_method?.qr_code || '', qr = pg?.payment_method?.qr_code_base64 || '';
+  if (!o.id || !/^[A-Za-z0-9_-]{1,64}$/.test(o.id) || !/^000201/.test(codigo) || codigo.length > 1024) throw new Erro(502, 'O Mercado Pago não devolveu um Pix válido.');
+  const exp = Date.parse(pg?.date_of_expiration || ''), expira = Number.isFinite(exp) ? Math.floor(exp / 1000) : agora() + 1800;
+  const qrOk = /^[A-Za-z0-9+/]+={0,2}$/.test(qr) && qr.length < 200000 ? qr : null;
+  await env.DB.prepare("UPDATE pedidos SET pix_ordem = ?, pix_codigo = ?, pix_qr = ?, pix_expira = ?, pag_metodo = 'pix' WHERE id = ? AND pix_ordem IS NULL")
+    .bind(o.id, codigo, qrOk, expira, p.id).run();
+  return { codigo, expira, qr: !!qrOk };
 }
 
-interface Pagamento { id: number | string; status: string; external_reference?: string; transaction_amount?: number; currency_id?: string; payment_type_id?: string; }
-
-/** Só marca como pago se o pagamento, lido direto da API, estiver aprovado, em BRL e com o valor exato do pedido. */
-async function aplicar(env: Env, pg: Pagamento): Promise<boolean> {
-  if (pg.status !== 'approved' || !pg.external_reference || pg.currency_id !== 'BRL' || typeof pg.transaction_amount !== 'number') return false;
-  const p = await env.DB.prepare("SELECT id, total, pag_status FROM pedidos WHERE ref = ? AND pagamento = 'online'").bind(pg.external_reference).first<{ id: number; total: number; pag_status: string }>();
-  if (!p || Math.round(pg.transaction_amount * 100) !== p.total) return false;
+/** Só marca como pago se a ordem, lida direto da API, estiver paga por inteiro, em BRL, e for a ordem Pix deste pedido. */
+async function aplicarOrdem(env: Env, o: Ordem): Promise<boolean> {
+  if (o.status !== 'processed' || o.status_detail !== 'accredited' || o.currency !== 'BRL' || !o.external_reference) return false;
+  const p = await env.DB.prepare("SELECT id, total, pag_status, pix_ordem FROM pedidos WHERE ref = ? AND pagamento = 'online'").bind(o.external_reference)
+    .first<{ id: number; total: number; pag_status: string; pix_ordem: string | null }>();
+  if (!p || p.pix_ordem !== o.id || centavos(o.total_paid_amount) !== p.total || centavos(o.total_amount) !== p.total) return false;
   if (p.pag_status === 'pago') return true;
-  return marcarPago(env, p.id, 'pago', String(pg.id), pg.payment_type_id || '');
+  return marcarPago(env, p.id, 'pago', o.id, 'pix');
 }
 
 async function marcarPago(env: Env, id: number, como: 'pago' | 'simulado', pagId: string, metodo: string): Promise<boolean> {
@@ -76,22 +94,38 @@ async function marcarPago(env: Env, id: number, como: 'pago' | 'simulado', pagId
   return true;
 }
 
-/** Chamado pelo site quando o cliente volta do checkout: o servidor consulta o Mercado Pago, nunca confia no navegador. */
-export async function conferirPagamento(env: Env, token: string): Promise<Response> {
+async function pedidoOnline(env: Env, token: string) {
   const p = await pedidoPorToken(env, token);
   if (p.pagamento !== 'online') throw new Erro(400, 'Este pedido não é pago online.');
-  if (p.pag_status !== 'pendente') return json({ pagStatus: p.pag_status });
-  if ((await modoOnline(env)) !== 'mercadopago') throw new Erro(409, 'Pagamento online não configurado.');
-  const r = await mp<{ results?: Pagamento[] }>(env, '/v1/payments/search?sort=date_created&criteria=desc&external_reference=' + encodeURIComponent(p.ref));
-  for (const pg of r.results || []) if (pg.external_reference === p.ref && (await aplicar(env, pg))) return json({ pagStatus: 'pago' });
-  return json({ pagStatus: 'pendente' });
+  return p;
 }
 
-export async function novoLink(env: Env, req: Request, token: string): Promise<Response> {
-  const p = await pedidoPorToken(env, token);
-  if (p.pagamento !== 'online' || p.pag_status !== 'pendente' || p.status !== 'aguardando_pagamento') throw new Erro(409, 'Este pedido não está aguardando pagamento.');
+/** O site pergunta se já foi pago: o servidor consulta a ordem no Mercado Pago, nunca confia no navegador. */
+export async function conferirPagamento(env: Env, token: string): Promise<Response> {
+  const p = await pedidoOnline(env, token);
+  if (p.pag_status !== 'pendente') return json({ pagStatus: p.pag_status });
   if ((await modoOnline(env)) !== 'mercadopago') throw new Erro(409, 'Pagamento online não configurado.');
-  return json({ url: await criarPreferencia(env, req, { id: p.id, ref: p.ref, total: p.total }) });
+  const r = await env.DB.prepare('SELECT pix_ordem FROM pedidos WHERE id = ?').bind(p.id).first<{ pix_ordem: string | null }>();
+  if (!r?.pix_ordem) return json({ pagStatus: 'pendente' });
+  const o = await mp<Ordem>(env, '/v1/orders/' + encodeURIComponent(r.pix_ordem));
+  return json({ pagStatus: o.id === r.pix_ordem && (await aplicarOrdem(env, o)) ? 'pago' : 'pendente' });
+}
+
+/** Devolve (criando se preciso) o Pix do pedido: código copia e cola e validade. */
+export async function pixDoPedido(env: Env, token: string): Promise<Response> {
+  const p = await pedidoOnline(env, token);
+  if (p.pag_status !== 'pendente' || p.status !== 'aguardando_pagamento') throw new Erro(409, 'Este pedido não está aguardando pagamento.');
+  return json({ pix: await cobrancaPix(env, { id: p.id, ref: p.ref, total: p.total }) });
+}
+
+/** Imagem do QR Code do Pix, servida pelo próprio site (só enquanto o pedido aguarda pagamento). */
+export async function qrDoPedido(env: Env, token: string): Promise<Response> {
+  const p = await pedidoOnline(env, token);
+  const r = await env.DB.prepare('SELECT pix_qr FROM pedidos WHERE id = ?').bind(p.id).first<{ pix_qr: string | null }>();
+  if (!r?.pix_qr || p.status !== 'aguardando_pagamento') throw new Erro(404, 'QR Code não disponível.');
+  const b = deB64(r.pix_qr), png = b[0] === 0x89 && b[1] === 0x50, jpg = b[0] === 0xff && b[1] === 0xd8;
+  if (!png && !jpg) throw new Erro(404, 'QR Code não disponível.');
+  return new Response(b, { headers: { 'content-type': png ? 'image/png' : 'image/jpeg', 'cache-control': 'private, no-store' } });
 }
 
 /** Só existe quando não há credenciais do Mercado Pago. O pedido fica marcado como "simulado", nunca como "pago". */
@@ -103,7 +137,7 @@ export async function pagamentoSimulado(env: Env, token: string): Promise<Respon
   return json({ pagStatus: 'simulado' });
 }
 
-/** Notificação do Mercado Pago: valida a assinatura, recusa repetições e confirma o pagamento na API antes de qualquer mudança. */
+/** Notificação do Mercado Pago (tópico "order"): valida a assinatura, recusa repetições e confirma o pagamento na API antes de qualquer mudança. */
 export async function webhook(req: Request, env: Env): Promise<Response> {
   const segredo = (env.MP_WEBHOOK_SECRET || '').trim();
   if (!segredo || (await modoOnline(env)) !== 'mercadopago') throw new Erro(503, 'Webhook não configurado.');
@@ -127,10 +161,10 @@ export async function webhook(req: Request, env: Env): Promise<Response> {
   if (!ins.meta.changes) throw new Erro(409, 'Notificação repetida.');
   await env.DB.prepare('DELETE FROM webhooks WHERE em < ?').bind(agora() - 86400).run();
   const tipo = url.searchParams.get('type') || corpo.type || '';
-  if (tipo !== 'payment') return json({ ok: true, ignorado: true });
-  let pg: Pagamento;
-  try { pg = await mp<Pagamento>(env, '/v1/payments/' + encodeURIComponent(dataId)); }
+  if (tipo !== 'order') return json({ ok: true, ignorado: true });
+  let o: Ordem;
+  try { o = await mp<Ordem>(env, '/v1/orders/' + encodeURIComponent(dataId)); }
   catch (e) { await env.DB.prepare('DELETE FROM webhooks WHERE chave = ?').bind(chave).run(); throw e; }
-  if (String(pg.id) !== dataId) return json({ ok: true, pago: false });
-  return json({ ok: true, pago: await aplicar(env, pg) });
+  if (String(o.id) !== dataId) return json({ ok: true, pago: false });
+  return json({ ok: true, pago: await aplicarOrdem(env, o) });
 }

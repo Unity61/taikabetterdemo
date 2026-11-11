@@ -145,7 +145,7 @@ TELAS.pagamentos = {
   async abrir(alvo) {
     const [cfg, tr, pub] = await Promise.all([api('GET', 'config'), api('GET', 'transacoes'), fetch('/api/cardapio', { cache: 'no-store' }).then((r) => r.json())]);
     CFG = cfg; const P = CFG.pagamento, modo = pub.pagamento.onlineModo;
-    const din = marca('Dinheiro', P.dinheiro), on = marca('Pagamento online (Pix e cartão)', P.online);
+    const din = marca('Dinheiro', P.dinheiro), on = marca('Pix pelo Mercado Pago', P.online);
     const deb = BANDEIRAS.map((b) => marca(b, P.debito.includes(b), { value: b })), cre = BANDEIRAS.map((b) => marca(b, P.credito.includes(b), { value: b }));
     const lidas = (l) => l.map((m) => $('input', m)).filter((i) => i.checked).map((i) => i.value);
     const txtModo = { mercadopago: ['Mercado Pago em modo de teste (sandbox)', 'ok'], simulado: ['Pagamento simulado: sem credenciais do Mercado Pago', 'aviso'], bloqueado: ['Bloqueado: a credencial configurada não é de teste', 'erro'] }[modo];

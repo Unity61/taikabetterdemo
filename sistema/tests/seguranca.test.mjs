@@ -16,7 +16,9 @@ const persist = path.join(raiz, '.wrangler', 'teste'), credFile = path.join(pers
 const SEGREDO = 'segredo-webhook-de-teste';
 const wr = path.join(raiz, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
 let dev, falso, cred = {};
-const pagamentos = new Map(); // id -> pagamento devolvido pelo Mercado Pago falso
+const ordens = new Map(); // id -> ordem devolvida pelo Mercado Pago falso
+const criadas = []; // corpos recebidos em POST /v1/orders
+const QR_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 function lerCred() { const c = {}; for (const l of fs.readFileSync(credFile, 'utf8').split(/\r?\n/)) { const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) c[m[1]] = m[2]; } return c; }
 async function req(metodo, caminho, o = {}) {
@@ -48,10 +50,14 @@ before(async () => {
     let corpo = ''; q.on('data', (d) => { corpo += d; }); q.on('end', () => {
       const u = new URL(q.url, 'http://x'); const ok = (o, st = 200) => { s.writeHead(st, { 'content-type': 'application/json' }); s.end(JSON.stringify(o)); };
       if (u.pathname === '/turnstile') return ok({ success: /name="response"\r\n\r\ntoken-ok\r\n/.test(corpo) });
-      if (u.pathname === '/checkout/preferences') return ok({ id: 'pref', init_point: 'https://www.mercadopago.com.br/producao-nao-usar', sandbox_init_point: 'https://sandbox.mercadopago.com.br/checkout/v1/redirect?pref_id=teste' });
-      if (u.pathname === '/v1/payments/search') return ok({ results: [...pagamentos.values()].filter((p) => p.external_reference === u.searchParams.get('external_reference')) });
-      const m = u.pathname.match(/^\/v1\/payments\/([\w-]+)$/);
-      if (m) return pagamentos.has(m[1]) ? ok(pagamentos.get(m[1])) : ok({ message: 'not found' }, 404);
+      if (u.pathname === '/v1/orders' && q.method === 'POST') {
+        const b = JSON.parse(corpo); criadas.push({ corpo: b, chave: q.headers['x-idempotency-key'] });
+        const id = 'ORDTST' + String(criadas.length).padStart(4, '0');
+        ordens.set(id, { id, status: 'action_required', status_detail: 'waiting_transfer', external_reference: b.external_reference, total_amount: b.total_amount, total_paid_amount: '0.00', currency: 'BRL' });
+        return ok({ id, status: 'action_required', transactions: { payments: [{ id: 'PAY' + id, date_of_expiration: new Date(Date.now() + 1800e3).toISOString(), payment_method: { id: 'pix', qr_code: '00020126580014br.gov.bcb.pix0136teste-' + id, qr_code_base64: QR_PNG } }] } });
+      }
+      const m = u.pathname.match(/^\/v1\/orders\/([\w-]+)$/);
+      if (m) return ordens.has(m[1]) ? ok(ordens.get(m[1])) : ok({ message: 'not found' }, 404);
       ok({}, 404);
     });
   }).listen(FALSO, '127.0.0.1');
@@ -235,43 +241,61 @@ test('editar preço, pausar item e fechar a loja refletem no site e nos pedidos'
   assert.equal((await req('PUT', '/api/admin/config/status', { sessao: DONO, body: { modo: 'aberto' } })).status, 200);
 });
 
-const assinar = (id, ts, rid, segredo = SEGREDO) => crypto.createHmac('sha256', segredo).update(`id:${id};request-id:${rid};ts:${ts};`).digest('hex');
-const notificar = (id, ts, rid, v1) => req('POST', `/api/pagamentos/webhook?data.id=${id}&type=payment`, { body: { type: 'payment', data: { id } }, origem: false, headers: { 'x-request-id': rid, ...(v1 === null ? {} : { 'x-signature': `ts=${ts},v1=${v1}` }) } });
-test('pagamento online: só o webhook assinado e conferido na API marca como pago', async () => {
+const assinar = (id, ts, rid, segredo = SEGREDO) => crypto.createHmac('sha256', segredo).update(`id:${id.toLowerCase()};request-id:${rid};ts:${ts};`).digest('hex');
+const notificar = (id, ts, rid, v1) => req('POST', `/api/pagamentos/webhook?data.id=${id}&type=order`, { body: { type: 'order', action: 'order.processed', data: { id } }, origem: false, headers: { 'x-request-id': rid, ...(v1 === null ? {} : { 'x-signature': `ts=${ts},v1=${v1}` }) } });
+const pagar = (id, extra = {}) => { const o = ordens.get(id); ordens.set(id, { ...o, status: 'processed', status_detail: 'accredited', total_paid_amount: o.total_amount, currency: 'BRL', ...extra }); };
+const ultimaOrdem = () => 'ORDTST' + String(criadas.length).padStart(4, '0');
+test('Pix: QR e copia e cola no próprio site; só o webhook assinado e conferido na API marca como pago', async () => {
   const p = await req('POST', '/api/pedidos', { body: pedidoBase({ pagamento: 'online' }) });
   assert.equal(p.status, 201); assert.equal(p.j.status, 'aguardando_pagamento');
-  assert.match(p.j.pagamento.url, /^https:\/\/sandbox\.mercadopago/, 'usa o endereço de sandbox, nunca o de produção');
+  assert.equal(p.j.pagamento.url, undefined, 'não manda o cliente para outra página');
+  assert.match(p.j.pagamento.pix.codigo, /^000201/, 'devolve o Pix copia e cola');
+  const enviada = criadas.at(-1).corpo, ordemId = ultimaOrdem();
+  assert.equal(enviada.transactions.payments[0].payment_method.id, 'pix');
+  assert.equal(enviada.total_amount, (p.j.total / 100).toFixed(2), 'cobra o total calculado no servidor');
   const ver = async () => (await req('GET', '/api/pedidos/' + p.j.token)).j;
+  assert.equal((await ver()).pix.codigo, p.j.pagamento.pix.codigo, 'o acompanhamento mostra o mesmo Pix');
+  const qr = await fetch(BASE + '/api/pedidos/' + p.j.token + '/pix-qr'); assert.equal(qr.status, 200); assert.equal(qr.headers.get('content-type'), 'image/png');
+  assert.equal((await fetch(BASE + '/api/pedidos/' + 'x'.repeat(32) + '/pix-qr')).status, 404, 'QR só com o token do próprio pedido');
+  const de = criadas.length;
+  assert.equal((await req('POST', `/api/pedidos/${p.j.token}/pix`, { body: {} })).j.pix.codigo, p.j.pagamento.pix.codigo);
+  assert.equal(criadas.length, de, 'pedir o Pix de novo não cria outra cobrança');
   const ref = async () => { const h = await req('GET', '/api/admin/transacoes', { sessao: DONO }); return h.j.transacoes.find((t) => t.id === p.j.numero); };
   assert.equal((await req('GET', '/api/admin/pedidos', { sessao: DONO })).j.pedidos.some((x) => x.id === p.j.numero), false, 'pedido sem pagamento não entra na fila');
   assert.equal((await req('POST', `/api/pedidos/${p.j.token}/pagamento-simulado`, { body: {} })).status, 403, 'com credenciais configuradas não existe pagamento simulado');
-  assert.equal((await req('POST', `/api/pedidos/${p.j.token}/conferir-pagamento`, { body: { pago: true, status: 'approved' } })).j.pagStatus, 'pendente', 'o navegador dizer "paguei" não muda nada');
+  assert.equal((await req('POST', `/api/pedidos/${p.j.token}/conferir-pagamento`, { body: { pago: true, status: 'processed' } })).j.pagStatus, 'pendente', 'o navegador dizer "paguei" não muda nada');
   const ts = () => String(Date.now());
-  assert.equal((await notificar('111', ts(), 'r1', null)).status, 401, 'sem assinatura');
-  assert.equal((await notificar('111', ts(), 'r2', 'a'.repeat(64))).status, 401, 'assinatura inventada');
-  let t = ts(); assert.equal((await notificar('111', t, 'r3', assinar('111', t, 'r3', 'outro-segredo'))).status, 401, 'assinada com outro segredo');
-  t = ts(); assert.equal((await notificar('111', t, 'r4', assinar('222', t, 'r4'))).status, 401, 'assinatura de outro pagamento');
-  const velho = String(Date.now() - 3600e3); assert.equal((await notificar('111', velho, 'r5', assinar('111', velho, 'r5'))).status, 401, 'notificação antiga');
+  assert.equal((await notificar(ordemId, ts(), 'r1', null)).status, 401, 'sem assinatura');
+  assert.equal((await notificar(ordemId, ts(), 'r2', 'a'.repeat(64))).status, 401, 'assinatura inventada');
+  let t = ts(); assert.equal((await notificar(ordemId, t, 'r3', assinar(ordemId, t, 'r3', 'outro-segredo'))).status, 401, 'assinada com outro segredo');
+  t = ts(); assert.equal((await notificar(ordemId, t, 'r4', assinar('ORDTST9999', t, 'r4'))).status, 401, 'assinatura de outra ordem');
+  const velho = String(Date.now() - 3600e3); assert.equal((await notificar(ordemId, velho, 'r5', assinar(ordemId, velho, 'r5'))).status, 401, 'notificação antiga');
+  t = ts(); let r = await notificar(ordemId, t, 'r6', assinar(ordemId, t, 'r6')); assert.equal(r.status, 200); assert.equal(r.j.pago, false, 'ordem ainda aguardando');
+  // Outra ordem paga, com a referência deste pedido, mas que não é a cobrança dele: nada muda.
+  const real = await descobrirRef(p.j.total), valor = (p.j.total / 100).toFixed(2);
+  ordens.set('ORDTSTX001', { id: 'ORDTSTX001', status: 'processed', status_detail: 'accredited', external_reference: real, total_amount: valor, total_paid_amount: valor, currency: 'BRL' });
+  t = ts(); r = await notificar('ORDTSTX001', t, 'r7', assinar('ORDTSTX001', t, 'r7')); assert.equal(r.j.pago, false, 'ordem que não é a do pedido');
+  pagar(ordemId, { total_paid_amount: '0.01' });
+  t = ts(); r = await notificar(ordemId, t, 'r8', assinar(ordemId, t, 'r8')); assert.equal(r.j.pago, false, 'valor pago diferente do total do pedido');
+  pagar(ordemId, { currency: 'USD' });
+  t = ts(); r = await notificar(ordemId, t, 'r9', assinar(ordemId, t, 'r9')); assert.equal(r.j.pago, false, 'moeda diferente');
   assert.equal((await ver()).status, 'aguardando_pagamento');
-  // Assinatura válida, mas a API do Mercado Pago diz outra coisa: nada muda.
-  const refPedido = crypto.randomBytes(4).toString('hex');
-  pagamentos.set('111', { id: 111, status: 'approved', external_reference: 'ref-de-outro-pedido-' + refPedido, transaction_amount: p.j.total / 100, currency_id: 'BRL' });
-  t = ts(); let r = await notificar('111', t, 'r6', assinar('111', t, 'r6')); assert.equal(r.status, 200); assert.equal(r.j.pago, false);
-  assert.equal((await ver()).pagStatus, 'pendente');
-  // Para os casos seguintes o teste precisa da referência real do pedido: o servidor a envia ao Mercado Pago, então o falso a devolve na busca.
-  const real = await descobrirRef(p.j.total);
-  pagamentos.set('112', { id: 112, status: 'pending', external_reference: real, transaction_amount: p.j.total / 100, currency_id: 'BRL' });
-  t = ts(); r = await notificar('112', t, 'r7', assinar('112', t, 'r7')); assert.equal(r.j.pago, false, 'pagamento não aprovado');
-  pagamentos.set('113', { id: 113, status: 'approved', external_reference: real, transaction_amount: 0.01, currency_id: 'BRL' });
-  t = ts(); r = await notificar('113', t, 'r8', assinar('113', t, 'r8')); assert.equal(r.j.pago, false, 'valor pago diferente do total do pedido');
-  assert.equal((await ver()).status, 'aguardando_pagamento');
-  pagamentos.set('114', { id: 114, status: 'approved', external_reference: real, transaction_amount: p.j.total / 100, currency_id: 'BRL', payment_type_id: 'bank_transfer' });
-  t = ts(); const v1 = assinar('114', t, 'r9'); r = await notificar('114', t, 'r9', v1);
+  pagar(ordemId);
+  t = ts(); const v1 = assinar(ordemId, t, 'r10'); r = await notificar(ordemId, t, 'r10', v1);
   assert.equal(r.status, 200); assert.equal(r.j.pago, true);
-  const fim = await ver(); assert.equal(fim.status, 'novo'); assert.equal(fim.pagStatus, 'pago');
-  assert.equal((await ref()).pag_id, '114');
-  assert.equal((await notificar('114', t, 'r9', v1)).status, 409, 'a mesma notificação repetida é recusada');
+  const fim = await ver(); assert.equal(fim.status, 'novo'); assert.equal(fim.pagStatus, 'pago'); assert.equal(fim.pix, null, 'depois de pago o Pix some');
+  assert.equal((await fetch(BASE + '/api/pedidos/' + p.j.token + '/pix-qr')).status, 404);
+  const tr = await ref(); assert.equal(tr.pag_id, ordemId); assert.equal(tr.pag_metodo, 'pix');
+  assert.equal((await notificar(ordemId, t, 'r10', v1)).status, 409, 'a mesma notificação repetida é recusada');
   assert.ok((await req('GET', '/api/admin/pedidos', { sessao: DONO })).j.pedidos.some((x) => x.id === p.j.numero), 'depois de pago, entra na fila');
+});
+test('Pix: conferir pelo site consulta a ordem na API', async () => {
+  const p = await req('POST', '/api/pedidos', { body: pedidoBase({ pagamento: 'online' }) });
+  const ordemId = ultimaOrdem();
+  const conferir = async () => (await req('POST', `/api/pedidos/${p.j.token}/conferir-pagamento`, { body: {} })).j.pagStatus;
+  assert.equal(await conferir(), 'pendente');
+  pagar(ordemId); assert.equal(await conferir(), 'pago');
+  assert.equal((await req('GET', '/api/pedidos/' + p.j.token)).j.status, 'novo');
 });
 // O Mercado Pago falso guarda a última external_reference recebida em /checkout/preferences? Não: lemos do próprio banco de teste via API de busca.
 async function descobrirRef(total) {

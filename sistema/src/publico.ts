@@ -1,5 +1,5 @@
 import { Env, Erro, Config, agora, aleatorio, sha256, json, lerJson, texto, inteiro, umDe, lista, objeto, lerConfig, lojaAberta, contar, registrar, chaveIp } from './util';
-import { modoOnline, criarPreferencia } from './pagamento';
+import { modoOnline, cobrancaPix } from './pagamento';
 
 /* ── cardápio ── */
 interface LinhaItem { id: number; categoria_id: number; nome: string; descricao: string; preco: number; foto: string | null; pausado: number; pos: number; }
@@ -186,8 +186,8 @@ export async function criarPedido(req: Request, env: Env): Promise<Response> {
   let pag: Record<string, unknown> = { modo: 'na_entrega' };
   if (modo === 'simulado') pag = { modo: 'simulado' };
   if (modo === 'mercadopago') {
-    try { pag = { modo: 'mercadopago', url: await criarPreferencia(env, req, { id: p!.id, ref, total: c.total }) }; }
-    catch { pag = { modo: 'mercadopago', erro: 'Não foi possível iniciar o pagamento. Tente de novo pelo acompanhamento do pedido.' }; }
+    try { pag = { modo: 'mercadopago', pix: await cobrancaPix(env, { id: p!.id, ref, total: c.total }) }; }
+    catch { pag = { modo: 'mercadopago', erro: 'Não foi possível gerar o Pix. Tente de novo pelo acompanhamento do pedido.' }; }
   }
   return json({ numero: p!.id, token, status, subtotal: c.subtotal, taxa: c.taxa, desconto: c.desconto, total: c.total, pagamento: pag }, 201);
 }
@@ -203,13 +203,16 @@ export async function pedidoPorToken(env: Env, token: string): Promise<PedidoLin
 
 export async function verPedido(env: Env, token: string): Promise<Response> {
   const p = await pedidoPorToken(env, token);
+  const pix = p.pagamento === 'online' && p.status === 'aguardando_pagamento'
+    ? await env.DB.prepare('SELECT pix_codigo AS codigo, pix_expira AS expira, pix_qr IS NOT NULL AS qr FROM pedidos WHERE id = ? AND pix_codigo IS NOT NULL').bind(p.id).first<{ codigo: string; expira: number; qr: number }>()
+    : null;
   const [it, ev] = await env.DB.batch([
     env.DB.prepare('SELECT nome, qtd, opcoes, obs, total FROM pedido_itens WHERE pedido_id = ? ORDER BY id').bind(p.id),
     env.DB.prepare('SELECT status, em FROM pedido_eventos WHERE pedido_id = ? ORDER BY id').bind(p.id)
   ]);
   return json({
     numero: p.id, status: p.status, tipo: p.tipo, endereco: p.endereco, bairro: p.bairro, subtotal: p.subtotal, taxa: p.taxa, desconto: p.desconto, total: p.total,
-    cupom: p.cupom, pagamento: p.pagamento, pagStatus: p.pag_status, onlineModo: p.pagamento === 'online' ? await modoOnline(env) : null, motivo: p.motivo, criado: p.criado, atualizado: p.atualizado,
+    cupom: p.cupom, pagamento: p.pagamento, pagStatus: p.pag_status, onlineModo: p.pagamento === 'online' ? await modoOnline(env) : null, pix: pix ? { codigo: pix.codigo, expira: pix.expira, qr: !!pix.qr } : null, motivo: p.motivo, criado: p.criado, atualizado: p.atualizado,
     itens: (it.results as { nome: string; qtd: number; opcoes: string; obs: string; total: number }[]).map((i) => ({ nome: i.nome, qtd: i.qtd, opcoes: (JSON.parse(i.opcoes) as { nome: string }[]).map((o) => o.nome), obs: i.obs, total: i.total })),
     eventos: ev.results
   });

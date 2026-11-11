@@ -2,7 +2,7 @@ import { Env, Erro, json } from './util';
 import { login, logout, eu } from './auth';
 import { admin } from './admin';
 import { cardapioPublico, foto, cotar, criarPedido, verPedido } from './publico';
-import { webhook, conferirPagamento, pagamentoSimulado, novoLink } from './pagamento';
+import { webhook, conferirPagamento, pagamentoSimulado, pixDoPedido, qrDoPedido } from './pagamento';
 
 const COMUNS: Record<string, string> = {
   'x-content-type-options': 'nosniff',
@@ -40,7 +40,8 @@ async function api(req: Request, env: Env, caminho: string): Promise<Response> {
     if (n === 2 && m === 'GET') return verPedido(env, p[1]);
     if (n === 3 && m === 'POST' && p[2] === 'conferir-pagamento') return conferirPagamento(env, p[1]);
     if (n === 3 && m === 'POST' && p[2] === 'pagamento-simulado') return pagamentoSimulado(env, p[1]);
-    if (n === 3 && m === 'POST' && p[2] === 'link-pagamento') return novoLink(env, req, p[1]);
+    if (n === 3 && m === 'POST' && p[2] === 'pix') return pixDoPedido(env, p[1]);
+    if (n === 3 && m === 'GET' && p[2] === 'pix-qr') return qrDoPedido(env, p[1]);
   }
   if (n === 2 && p[0] === 'pagamentos' && p[1] === 'webhook' && m === 'POST') return webhook(req, env);
   if (n === 2 && p[0] === 'painel' && p[1] === 'chave' && m === 'GET') return json({ turnstile: env.TURNSTILE_SITEKEY || '' });

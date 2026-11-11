@@ -488,3 +488,15 @@ mark{background:rgba(245,138,46,.35);color:inherit;padding:0 1px}
 .note.bad{color:var(--shu);font-weight:700}.note.ok{font-weight:700}
 .trk__now.bad h4{color:var(--shu)}
 #place.wait{opacity:.55}
+
+/* ── Pix no próprio site ── */
+.pix{margin-top:20px;padding:18px 16px 16px;background:var(--cream);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.pix__val{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:12px;border-bottom:3px double var(--ink)}
+.pix__val span{font:700 10.5px/1 var(--f-b);letter-spacing:.24em;text-transform:uppercase;color:var(--ink-2)}
+.pix__val b{font:400 26px/1 var(--f-d);color:var(--ink)}
+.pix__qr{margin:16px auto 0;width:max-content;padding:10px;background:#fff;box-shadow:0 0 0 1.5px var(--ink)}
+.pix__qr img{width:220px;height:220px;image-rendering:pixelated}
+.pix__how{margin-top:14px;font:500 14px/1.5 var(--f-b);color:var(--ink);text-align:center}
+.pix__lbl{display:block;margin-top:16px;font:700 10.5px/1 var(--f-b);letter-spacing:.24em;text-transform:uppercase;color:var(--ink-2)}
+.pix__cod{display:block;width:100%;margin-top:8px;padding:10px 12px;border:1.5px dashed rgba(28,20,16,.55);border-radius:0;background:var(--washi);color:var(--ink);font:500 12.5px/1.45 ui-monospace,Consolas,monospace;word-break:break-all;resize:none}
+.pix__cod:focus{outline:2px solid var(--ember);outline-offset:2px}

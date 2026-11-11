@@ -318,7 +318,7 @@ $('#dish-add').addEventListener('click',()=>{
 });
 
 /* ── pedido (carrinho): os valores mostrados são conferidos pelo servidor, que é quem calcula o total final ── */
-const PAGS={dinheiro:'Dinheiro',debito:'Débito',credito:'Crédito',online:'Pagar online'};
+const PAGS={dinheiro:'Dinheiro',debito:'Débito',credito:'Crédito',online:'Pix'};
 const cent=v=>Math.round(v*100);
 const taxa=()=>{if(modo!=='entrega')return 0;if(!form.bairro)return null;const b=L.entrega.bairros.find(x=>x[0]===form.bairro);if(!b)return null;return L.entrega.gratisAcima>0&&subtotal()>=L.entrega.gratisAcima?0:b[1]};
 const descLocal=()=>modo==='retirada'&&L.retirada.descontoPct>0?Math.round(subtotal()*L.retirada.descontoPct)/100:0;
@@ -360,7 +360,7 @@ function renderCart(){
        '<p class="note" style="margin-top:8px">Entrega em '+tempoEntrega+'. Seu bairro não está na lista? Fale com a loja pelo WhatsApp.'+(L.entrega.gratisAcima>0?' Entrega grátis a partir de '+fmt(L.entrega.gratisAcima)+'.':'')+'</p>'
       :'<div class="box" style="margin-top:22px"><h5>Retirar em</h5><p>'+esc(endLoja)+'<br>Pronto em cerca de '+L.retirada.minutos+' min.'+(L.retirada.descontoPct>0?'<br>'+L.retirada.descontoPct+'% de desconto na retirada.':'')+'</p></div>')+
     '<div class="field" id="f-pag"><span>Como você vai pagar?</span><div class="pays">'+pays.map(p=>'<button type="button" data-pag="'+p+'" aria-pressed="'+(form.pag===p)+'">'+PAGS[p]+'</button>').join('')+'</div></div>'+
-    (form.pag==='online'?'<p class="note" style="margin-top:8px">'+(P.onlineModo==='mercadopago'?'Pix ou cartão pelo Mercado Pago, em ambiente de teste (sandbox).':'Pagamento simulado: nenhuma cobrança real é feita nesta demonstração.')+'</p>':form.pag?'<p class="note" style="margin-top:8px">Pagamento na '+(modo==='entrega'?'entrega':'retirada')+'.</p>':'')+
+    (form.pag==='online'?'<p class="note" style="margin-top:8px">'+(P.onlineModo==='mercadopago'?'Pix pelo Mercado Pago: o QR Code e o código copia e cola aparecem aqui mesmo, logo depois de enviar o pedido.':'Pagamento simulado: nenhuma cobrança real é feita nesta demonstração.')+'</p>':form.pag?'<p class="note" style="margin-top:8px">Pagamento na '+(modo==='entrega'?'entrega':'retirada')+'.</p>':'')+
     (form.pag==='dinheiro'?'<label class="field" id="f-troco"><span>Troco para quanto?</span><input id="troco" type="text" inputmode="decimal" autocomplete="off" placeholder="Deixe vazio se não precisa" value="'+esc(form.troco)+'"></label>':'')+
     '<div class="field" id="f-cupom"><span>Cupom de desconto</span><div class="cupom"><input id="cupom" type="text" maxlength="30" autocomplete="off" autocapitalize="characters" placeholder="Código" value="'+esc(form.cupom)+'"><button type="button" id="cupom-ok">Aplicar</button></div></div>'+
     (cotErro?'<p class="note bad" style="margin-top:8px">'+esc(cotErro)+'</p>':cot&&cot.cupom?'<p class="note ok" style="margin-top:8px">Cupom '+esc(cot.cupom)+' aplicado.</p>':form.cupom.trim()&&modo==='entrega'&&!form.bairro?'<p class="note" style="margin-top:8px">Escolha o bairro para conferir o cupom.</p>':'')+
@@ -399,7 +399,7 @@ $('#place').addEventListener('click',async()=>{
   pedido={token:r.token,n:r.numero,t0:Date.now(),itens:snap}; info=null;
   store.set('pedido',pedido); cart=[]; save(); form.cupom='';form.obs='';form.troco='';cot=null;cotSig='';
   if(navigator.vibrate){try{navigator.vibrate([18,60,30])}catch(e){}}
-  if(r.pagamento&&r.pagamento.modo==='mercadopago'&&r.pagamento.url){location.href=r.pagamento.url;return}
+  if(r.pagamento&&r.pagamento.erro) toast(r.pagamento.erro);
   openSheet('acompanhar');
 });
 
@@ -423,6 +423,17 @@ function resumoHTML(p){
     '<li><span>'+(p.tipo==='entrega'?'Taxa de entrega':'Retirada')+'</span><span>'+(p.taxa?fmt(p.taxa/100):'Grátis')+'</span></li><li style="font-weight:700"><span>Total</span><span>'+fmt(p.total/100)+'</span></li></ul></div>'+
     '<div class="box"><h5>'+(p.tipo==='entrega'?'Entrega':'Retirada')+' · '+PAGS[p.pagamento]+(p.pagStatus==='pago'?' · pago':p.pagStatus==='simulado'?' · pagamento simulado':'')+'</h5><p>'+(p.tipo==='entrega'?esc([p.endereco,p.bairro].filter(Boolean).join(' · '))+'<br>Previsão de '+tempoEntrega:esc(endLoja)+'<br>Cerca de '+L.retirada.minutos+' min')+'</p></div>';
 }
+function pixHTML(p){
+  if(!p.pix) return '<div class="pix"><p class="note">Não foi possível gerar o Pix agora.</p></div><div class="acts" style="margin-top:14px"><button type="button" class="btn btn--fire btn--wide" id="pg-pix">Gerar Pix</button></div>';
+  const vence=p.pix.expira?hora(p.pix.expira*1000):'';
+  return '<div class="pix"><p class="pix__val"><span>Total</span><b>'+fmt(p.total/100)+'</b></p>'+
+    (p.pix.qr?'<figure class="pix__qr"><img src="/api/pedidos/'+encodeURIComponent(pedido.token)+'/pix-qr" width="220" height="220" alt="QR Code do Pix de '+fmt(p.total/100)+'"></figure>':'')+
+    '<p class="pix__how">Abra o app do seu banco, escolha <b>Pix</b> e '+(p.pix.qr?'leia o QR Code ou cole o código abaixo.':'cole o código abaixo.')+'</p>'+
+    '<label class="pix__lbl" for="pix-cod">Pix copia e cola</label><textarea id="pix-cod" class="pix__cod" readonly rows="4" spellcheck="false">'+esc(p.pix.codigo)+'</textarea>'+
+    '<div class="acts" style="margin-top:12px"><button type="button" class="btn btn--fire btn--wide" id="pg-copy">Copiar código Pix</button><button type="button" class="btn btn--line btn--wide" id="pg-conf">Já paguei, conferir</button></div>'+
+    (vence?'<p class="note" style="margin-top:10px">Válido até '+vence+'. Depois disso o pedido é cancelado.</p>':'')+
+    '</div><p class="demo"><b>Teste</b><span>Pix de teste do Mercado Pago (sandbox): nenhuma cobrança real é feita. No sandbox, Pix de exatamente R$ 50,00 é aprovado sozinho em até 1 minuto; outros valores ficam aguardando.</span></p>';
+}
 function renderTrack(){
   const sc=$('#trk-scroll');
   if(!pedido){sc.innerHTML='<div class="shead"><div><p class="eyebrow">Acompanhar</p><h3>Nenhum pedido em andamento</h3></div></div><div class="empty"><p class="k" aria-hidden="true">火</p><p>Quando você fizer um pedido, o andamento aparece aqui.</p><button type="button" class="btn btn--ink" data-close>Ver cardápio</button></div>';return}
@@ -431,9 +442,9 @@ function renderTrack(){
   const E=PASSOS(info.tipo), quando={}; info.eventos.forEach(ev=>{quando[ev.status]=ev.em*1000});
   let topo, passos='';
   if(info.status==='aguardando_pagamento'){
-    topo='<div class="trk__now" aria-live="polite"><h4>Aguardando pagamento</h4><p>O pedido só vai para a loja depois que o pagamento for confirmado.</p></div>'+
+    topo='<div class="trk__now" aria-live="polite"><h4>Aguardando pagamento</h4><p>'+(info.onlineModo==='mercadopago'?'Pague o Pix abaixo. O pedido vai para a loja assim que o pagamento for confirmado, e esta tela atualiza sozinha.':'O pedido só vai para a loja depois que o pagamento for confirmado.')+'</p></div>'+
       (info.onlineModo==='mercadopago'
-        ?'<div class="acts" style="margin-top:14px"><button type="button" class="btn btn--fire btn--wide" id="pg-link">Pagar com Mercado Pago</button><button type="button" class="btn btn--line btn--wide" id="pg-conf">Já paguei, conferir</button></div><p class="demo"><b>Teste</b><span>Ambiente de teste (sandbox) do Mercado Pago. Nenhuma cobrança real é feita.</span></p>'
+        ?pixHTML(info)
         :'<p class="demo"><b>Simulado</b><span>Não há credenciais de pagamento configuradas. O botão abaixo simula um pagamento aprovado; nenhuma cobrança é feita.</span></p><div class="acts" style="margin-top:14px"><button type="button" class="btn btn--fire btn--wide" id="pg-sim">Simular pagamento aprovado</button></div>');
   }else if(info.status==='recusado'||info.status==='cancelado'){
     topo='<div class="trk__now bad" aria-live="polite"><h4>'+tituloStatus()+'</h4><p>'+(info.motivo?'Motivo: '+esc(info.motivo):'Fale com a loja para saber mais.')+'</p></div>';
@@ -446,15 +457,17 @@ function renderTrack(){
     '<div class="acts"><a class="btn btn--ink btn--wide" href="'+esc(zap)+'" target="_blank" rel="noopener">Falar com a loja</a><button type="button" class="btn btn--line btn--wide" data-close>Voltar ao cardápio</button></div></div>';
 }
 $('#trk-scroll').addEventListener('click',async e=>{
-  const b=e.target.closest('#pg-sim,#pg-conf,#pg-link'); if(!b||!pedido||b.disabled) return; b.disabled=true;
+  const b=e.target.closest('#pg-sim,#pg-conf,#pg-pix,#pg-copy'); if(!b||!pedido||b.disabled) return;
+  if(b.id==='pg-copy'){const t=$('#pix-cod');let ok=false;try{await navigator.clipboard.writeText(t.value);ok=true}catch(err){t.focus();t.select();try{ok=document.execCommand('copy')}catch(e2){}}toast(ok?'Código Pix copiado':'Selecione o código e copie');return}
+  b.disabled=true;
   try{
-    if(b.id==='pg-link'){const r=await api('pedidos/'+pedido.token+'/link-pagamento',{});location.href=r.url;return}
+    if(b.id==='pg-pix'){await api('pedidos/'+pedido.token+'/pix',{});info=null;b.disabled=false;tickTrack();return}
     const r=await api('pedidos/'+pedido.token+(b.id==='pg-sim'?'/pagamento-simulado':'/conferir-pagamento'),{});
     if(r.pagStatus==='pendente') toast('O pagamento ainda não foi confirmado');
   }catch(err){toast(err.erro)}
   b.disabled=false; tickTrack();
 });
-let trackT=0, buscando=false;
+let trackT=0, buscando=false, conferirN=0;
 async function tickTrack(){
   clearTimeout(trackT); if(!pedido||buscando) return;
   buscando=true; let novo=null;
@@ -470,6 +483,7 @@ async function tickTrack(){
     }
   }
   if(info&&FINAIS[info.status]){if(Date.now()-info.atualizado*1000>2*3600e3&&openEl!==SH.acompanhar){arquivar();pedido=null;info=null;store.set('pedido',null);sync()}return}
+  if(info&&info.status==='aguardando_pagamento'&&info.onlineModo==='mercadopago'&&info.pix&&!document.hidden&&++conferirN%3===0){api('pedidos/'+pedido.token+'/conferir-pagamento',{}).catch(()=>{})}
   trackT=setTimeout(tickTrack,document.hidden?20000:4000);
 }
 

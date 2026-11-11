@@ -31,8 +31,8 @@ const dataHora = (t) => new Date(t * 1000).toLocaleString('pt-BR', { day: '2-dig
 const haQuanto = (t, agora) => { const m = Math.max(0, Math.floor((agora - t) / 60)); return m < 1 ? 'agora' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; };
 const fone = (t) => String(t).replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3').replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3');
 const STATUS = { aguardando_pagamento: 'Aguardando pagamento', novo: 'Novo', aceito: 'Aceito', em_preparo: 'Em preparo', saiu_entrega: 'Saiu para entrega', pronto_retirada: 'Pronto para retirada', concluido: 'Concluído', recusado: 'Recusado', cancelado: 'Cancelado' };
-const PAG = { dinheiro: 'Dinheiro', debito: 'Débito', credito: 'Crédito', online: 'Online' };
-const PAGST = { na_entrega: 'na entrega', pendente: 'pagamento pendente', pago: 'pago online', simulado: 'pagamento simulado' };
+const PAG = { dinheiro: 'Dinheiro', debito: 'Débito', credito: 'Crédito', online: 'Pix' };
+const PAGST = { na_entrega: 'na entrega', pendente: 'pagamento pendente', pago: 'Pix pago', simulado: 'pagamento simulado' };
 const prefs = { get(k, d) { try { const v = localStorage.getItem('taika.painel.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('taika.painel.' + k, JSON.stringify(v)); } catch {} } };
 
 let EU = null, CSRF = '', CFG = null;
